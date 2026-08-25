@@ -228,13 +228,8 @@ code { font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace; font
   opacity: 1; visibility: visible; transform: none;
 }
 
-/* 拿不到新数字时环变灰。绿环配一个几小时前的缓存值，看着就像刚取的，那是撒谎 */
 /* 配额说明按来源分行，行距收紧一点，免得两行看着像两段 */
 #quota-note > div + div, #dash-quota-usage > div + div { margin-top: 3px; }
-
-.dial.is-stale .value { stroke: var(--text-faint) !important; }
-.dial.is-stale .dial-text { color: var(--text-dim); }
-.dial.is-stale .dial-sub { color: var(--warn); opacity: 1; }
 
 /* stretch 让并排的卡片等高，边界对齐；start 会让高度不同的卡片下沿参差 */
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; margin-bottom: 16px; }
@@ -662,6 +657,14 @@ input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 .quota-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .quota-scroll { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .quota-scroll > .stack:not(:empty) { margin-top: 8px; }
+.quota-updated {
+  align-self: flex-end;
+  margin-top: 8px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
 
 @media (max-width: 780px) {
   .quota-card-dashboard { min-height: 240px; }

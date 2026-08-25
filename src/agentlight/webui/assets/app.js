@@ -229,6 +229,7 @@
     page: "dashboard",
     lamp: 0,
     quota: null,
+    quotaUpdatedAt: 0,
     quotaSource: "all",
     quotaTimer: 0,
     quotaFollowupTimer: 0,
@@ -759,9 +760,9 @@
     return `${at.getMonth() + 1}/${at.getDate()} ${time}`;
   }
 
-  function dial(label, value, size = 76, sub = "", stale = false) {
+  function dial(label, value, size = 76, sub = "") {
     const wrap = document.createElement("div");
-    wrap.className = stale ? "dial is-stale" : "dial";
+    wrap.className = "dial";
     const known = Number.isFinite(value) && value >= 0 && value <= 100;
     const radius = (size - 20) / 2;
     const circumference = 2 * Math.PI * radius;
@@ -823,7 +824,7 @@
   // 为环形图下方的重置时间预留空间。
   // 两张卡都只放环形图：token 用量对判断「还能用多久」没有帮助，去掉。
   const QUOTA_PANELS = [
-    { picker: "dash-quota-source", dials: "dash-quota-dials", usage: "dash-quota-usage", dialSize: 58 },
+    { picker: "dash-quota-source", dials: "dash-quota-dials", usage: "dash-quota-usage", updated: "dash-quota-updated", dialSize: 58 },
     { picker: "quota-source", dials: "quota-dials", usage: "quota-usage", note: "quota-note", dialSize: 76 },
   ];
 
@@ -831,8 +832,8 @@
   // 也让两个来源的排版对得上。多出来的窗口（Opus/Fable 周额度）排在后面。
   const CLAUDE_FIXED_WINDOWS = [["five_hour", "5h"], ["seven_day", "Weekly"]];
 
-  // 只有这两个状态代表「屏幕上的数字就是刚取回来的」。其余都是上一次成功的缓存，
-  // 必须让人一眼看出来 —— 否则你会拿一个几小时前的数字去和 Claude 桌面端对账。
+  // 只有这两个状态代表「屏幕上的数字就是刚取回来的」。其余是上一次成功的缓存；
+  // 数字保持正常配色，但环下方仍写明缓存时间，避免误解数据的新鲜度。
   const CLAUDE_LIVE_STATUSES = new Set(["connected", "refreshing", "statusline"]);
 
   function quotaDials(source, data) {
@@ -931,9 +932,14 @@
     // 只有 All 模式才需要标出来源，单来源时前缀纯属噪音
     for (const item of items) {
       const label = source === "all" ? `${item.origin} ${item.label}` : item.label;
-      dials.append(dial(label, item.value, panel.dialSize, item.sub || formatReset(item.resetsAt), item.stale));
+      dials.append(dial(label, item.value, panel.dialSize, item.sub || formatReset(item.resetsAt)));
     }
     dials.classList.toggle("dial-row-dense", items.length > 2);
+
+    if (panel.updated) {
+      const updated = $(panel.updated);
+      updated.textContent = `更新时间：${formatMoment(store.quotaUpdatedAt) || "—"}`;
+    }
 
     if (panel.note) {
       const note = $(panel.note);
@@ -974,6 +980,7 @@
           data = await run(() => api("GET", "/v1/quota?refresh=1&source=codex"));
           if (!data) return false;
           store.quota = data;
+          store.quotaUpdatedAt = Math.floor(Date.now() / 1000);
           paintQuota();
           data = await run(() => api("GET", "/v1/quota?refresh=1&source=claude"));
         } else {
@@ -982,6 +989,7 @@
         }
         if (!data) return false;
         store.quota = data;
+        store.quotaUpdatedAt = Math.floor(Date.now() / 1000);
         clearTimeout(store.quotaFollowupTimer);
         store.quotaFollowupTimer = 0;
         const claudeStatus = data.claude && data.claude.status;

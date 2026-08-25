@@ -185,16 +185,27 @@ def test_the_refresh_button_never_claims_success_when_a_source_failed() -> None:
     assert 'say("✓ Agent 配额已刷新")' not in source
 
 
-def test_cached_quota_numbers_are_visually_marked_as_cached() -> None:
-    """绿环配一个几小时前的数字，看着和刚取的一模一样。
-    环必须变灰，环下面还要写清这是什么时候的。"""
+def test_cached_quota_numbers_keep_normal_color_and_show_cache_time() -> None:
+    """缓存值仍按正常配额显示，但环下面要写清这是什么时候的数据。"""
     source = read("assets/app.js")
     css = read("assets/app.css")
 
     assert "CLAUDE_LIVE_STATUSES" in source
     assert '`缓存 ${formatMoment(claude.quota_updated_at)' in source
-    assert 'stale ? "dial is-stale" : "dial"' in source
-    assert ".dial.is-stale .value" in css
+    assert 'wrap.className = "dial"' in source
+    assert ".dial.is-stale" not in css
+
+
+def test_dashboard_quota_card_shows_its_last_update_time() -> None:
+    html = read("index.html")
+    source = read("assets/app.js")
+    css = read("assets/app.css")
+
+    assert 'id="dash-quota-updated"' in html
+    assert 'updated: "dash-quota-updated"' in source
+    assert "quotaUpdatedAt" in source
+    assert "更新时间：${formatMoment(store.quotaUpdatedAt)" in source
+    assert ".quota-updated" in css
 
 
 def test_the_refresh_interval_label_is_short_and_its_caveats_live_in_a_tooltip() -> None:
