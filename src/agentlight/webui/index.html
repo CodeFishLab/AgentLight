@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="agentlight-token" content="__AGENTLIGHT_TOKEN__">
+<title>Agent 状态灯</title>
+<link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="sidebar" aria-label="主导航">
+    <div class="brand">
+      <img src="/assets/logo.svg" alt="" width="34" height="34">
+      <div class="brand-text">
+        <strong>Agent 状态灯</strong>
+        <span id="brand-version">—</span>
+      </div>
+    </div>
+    <ul class="nav" role="tablist">
+      <li><button class="nav-item is-active" role="tab" data-page="dashboard" aria-selected="true"><span class="nav-dot"></span>总览</button></li>
+      <li><button class="nav-item" role="tab" data-page="effects" aria-selected="false"><span class="nav-dot"></span>灯效方案</button></li>
+      <li><button class="nav-item" role="tab" data-page="integrations" aria-selected="false"><span class="nav-dot"></span>Agent 集成</button></li>
+      <li><button class="nav-item" role="tab" data-page="device" aria-selected="false"><span class="nav-dot"></span>设备设置</button></li>
+      <li><button class="nav-item" role="tab" data-page="api" aria-selected="false"><span class="nav-dot"></span>自定义接入</button></li>
+      <li><button class="nav-item" role="tab" data-page="logs" aria-selected="false"><span class="nav-dot"></span>诊断日志</button></li>
+      <li><button class="nav-item" role="tab" data-page="settings" aria-selected="false"><span class="nav-dot"></span>通用设置</button></li>
+    </ul>
+    <div class="sidebar-foot">
+      <div class="device-pill" id="device-pill">
+        <span class="pulse-dot" data-tone="idle"></span>
+        <span id="device-pill-text">检测设备…</span>
+      </div>
+      <button class="ghost small" id="theme-toggle" type="button">切换浅色</button>
+    </div>
+  </nav>
+
+  <main class="content">
+    <header class="topbar">
+      <div class="conn" id="conn-state" data-tone="idle"><span class="pulse-dot" data-tone="idle"></span><span id="conn-text">连接中…</span></div>
+      <div class="topbar-actions">
+        <button class="ghost" id="toggle-mute" type="button" aria-pressed="false">设备蜂鸣静音</button>
+        <button class="ghost" id="toggle-night" type="button" aria-pressed="false">夜间模式</button>
+        <button class="ghost" id="toggle-pause" type="button" aria-pressed="false">暂停联动</button>
+      </div>
+    </header>
+
+    <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
+
+    <div class="pages">
+      <!-- 总览 -->
+      <section class="page is-active" data-page="dashboard" role="tabpanel">
+        <div class="page-head">
+          <h1>总览</h1>
+        </div>
+
+        <div class="stat-row">
+          <article class="card stat stat-hero">
+            <span class="stat-label">当前状态</span>
+            <div class="stat-hero-body">
+              <div class="stat-hero-text">
+                <strong class="stat-value" id="stat-state">熄灭</strong>
+                <span class="stat-sub" id="stat-source">系统</span>
+              </div>
+              <div class="lamps lamps-lg" id="hero-lamps" aria-hidden="true"></div>
+            </div>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">等待时长</span>
+            <strong class="stat-value" id="stat-wait">—</strong>
+            <span class="stat-sub" id="stat-wait-sub">没有需要你处理的会话</span>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">会话统计</span>
+            <strong class="stat-value" id="stat-sessions">0</strong>
+            <span class="stat-sub" id="stat-sessions-sub">暂无活动会话</span>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">当前灯效</span>
+            <strong class="stat-value" id="stat-effect">常亮</strong>
+            <span class="stat-sub" id="stat-effect-sub">固件原生</span>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-head"><h2>状态时间线</h2><span class="muted">最近 30 分钟</span></div>
+          <div class="timeline" id="timeline" aria-hidden="true"></div>
+          <div class="timeline-axis"><span>30 分钟前</span><span>现在</span></div>
+          <div class="legend" id="timeline-legend"></div>
+        </article>
+
+        <div class="split">
+          <article class="card quota-card quota-card-dashboard">
+            <div class="card-head">
+              <h2>Agent 配额</h2>
+              <div class="quota-actions">
+                <button class="ghost small" id="dash-refresh-quota" type="button">刷新</button>
+                <div class="seg" id="dash-quota-source"></div>
+              </div>
+            </div>
+            <div class="quota-scroll">
+              <div class="dial-row dial-row-compact" id="dash-quota-dials"></div>
+              <div id="dash-quota-usage" class="stack"></div>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>关注队列</h2><span class="badge" id="attention-count">0</span></div>
+            <div id="attention-list" class="stack"></div>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-head"><h2>活动会话</h2><span class="muted" id="last-off"></span></div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>来源</th><th>会话</th><th>状态</th><th>更新时间</th><th></th></tr></thead>
+              <tbody id="sessions-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <!-- 灯效方案 -->
+      <section class="page" data-page="effects" role="tabpanel">
+        <div class="page-head">
+          <h1>灯效方案</h1>
+        </div>
+
+        <div class="split split-wide">
+          <article class="card">
+            <div class="card-head">
+              <h2>编辑档案</h2>
+              <div class="seg" id="state-picker" role="tablist"></div>
+            </div>
+
+            <div class="editor">
+              <div class="preview-stage">
+                <div class="lamps lamps-xl" id="editor-lamps" aria-hidden="true"></div>
+                <span class="muted" id="editor-caption">预览已按亮度换算</span>
+              </div>
+
+              <div class="field-grid">
+                <label class="field">
+                  <span>灯效</span>
+                  <select id="field-effect"></select>
+                </label>
+                <label class="field">
+                  <span>提示音</span>
+                  <select id="field-sound"></select>
+                </label>
+                <div class="field field-colors">
+                  <span>三颗灯颜色</span>
+                  <div class="color-row" id="field-colors"></div>
+                  <div class="swatch-row"><div class="swatches" id="color-presets"></div></div>
+                </div>
+                <label class="field">
+                  <span>亮度 <b id="out-brightness">20%</b></span>
+                  <input type="range" id="field-brightness" min="0" max="100" step="1">
+                </label>
+                <label class="field">
+                  <span>周期 <b id="out-period">1.00 秒</b></span>
+                  <input type="range" id="field-period" min="100" max="5000" step="10">
+                </label>
+                <div class="field" id="effect-params"></div>
+              </div>
+
+              <div class="button-row">
+                <button class="primary" id="save-profile" type="button">保存档案</button>
+                <button class="ghost" id="preview-device" type="button">测试</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head"><h2>灯效预览</h2></div>
+            <div class="preview-grid" id="preview-grid"></div>
+          </article>
+        </div>
+
+        <article class="card manual-bar">
+          <div class="manual-head">
+            <h2>手动状态</h2>
+            <button class="ghost" id="manual-auto" data-manual-state="auto" aria-pressed="false" type="button">恢复自动</button>
+          </div>
+          <div class="chip-row" id="manual-buttons"></div>
+          <span class="muted">数字键 1–9 切换，0 恢复自动</span>
+        </article>
+      </section>
+
+      <!-- Agent 集成 -->
+      <section class="page" data-page="integrations" role="tabpanel">
+        <div class="page-head">
+          <h1>Agent 集成</h1>
+        </div>
+        <div class="stat-row stat-row-2">
+          <article class="card stat"><span class="stat-label">Codex</span><strong class="stat-value" id="codex-state">检测中</strong><span class="stat-sub" id="codex-sub">支持桌面版和 CLI</span></article>
+          <article class="card stat"><span class="stat-label">Claude Code</span><strong class="stat-value" id="claude-state">检测中</strong><span class="stat-sub" id="claude-sub">权限、等待输入、失败与完成事件</span></article>
+        </div>
+        <article class="card">
+          <div class="button-row">
+            <button class="primary" id="install-hooks" type="button">一键安装 / 修复</button>
+            <button class="danger" id="remove-hooks" type="button">移除本应用 Hooks</button>
+            <button class="ghost" id="open-backups" type="button">打开备份目录</button>
+          </div>
+          <p class="hint" id="install-summary">「一键安装 / 修复」会改写 Codex 与 Claude Code 的配置，改动前自动备份到备份目录。两边各自还要做一步，见下。</p>
+          <div class="guide">
+            <div class="guide-block">
+              <h3>Codex</h3>
+              <ol class="steps">
+                <li>点上面的「一键安装 / 修复」。</li>
+                <li>打开 PowerShell，运行 <code>codex</code>。</li>
+                <li>输入 <code>/hooks</code>。</li>
+                <li>如果出现 <code>Hooks need review</code>，选择 <code>Trust all and continue</code>。</li>
+                <li>审核时确认<strong>所有</strong>命令都指向这个脚本：
+                  <br><code id="codex-hook-path">—</code>
+                  <br><span class="muted">这里是 <code>.ps1</code> 而不是 <code>agentlightctl.exe</code>：Codex 走 PowerShell 脚本，Claude Code 才走 exe。两边路径本来就不一样，不是装错了。</span></li>
+                <li><strong>完全退出 Codex，包括右下角系统托盘里的那个</strong>，然后重新打开 —— <code>hooks.json</code> 只在启动时读一次，光关窗口不算。</li>
+                <li><strong>新建一个任务</strong>再测试，别在旧任务里发消息 —— 旧任务用的是重启前的旧配置。发一条<code>测试状态灯</code>，灯应该跟着变，本页的「活动会话」也会出现真实事件。</li>
+              </ol>
+            </div>
+            <div class="guide-block">
+              <h3>Claude Code</h3>
+              <ol class="steps">
+                <li>点上面的「一键安装 / 修复」。</li>
+                <li>重启 Claude Code。<strong>不需要信任步骤</strong> —— 它读 <code>~/.claude/settings.json</code>，不做命令审核。</li>
+                <li>安装时会顺带写入可选状态栏（<code id="claude-statusline-path">—</code>），在 Claude Code 里显示灯的状态和剩余额度。</li>
+                <li>额度由 AgentLight 读取 Claude 登录凭据后台获取，Claude Code 不必一直开着。<strong>凭据过期时</strong>在终端运行 <code>claude</code> 重新登录即可，AgentLight 会自动恢复，不用重启它。</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- 设备设置 -->
+      <section class="page" data-page="device" role="tabpanel">
+        <div class="page-head">
+          <h1>设备设置</h1>
+        </div>
+        <div class="split">
+          <article class="card quota-card quota-card-device">
+            <div class="card-head">
+              <h2>Agent 配额</h2>
+              <div class="quota-actions">
+                <button class="ghost small" id="sync-quota" type="button">刷新</button>
+                <div class="seg" id="quota-source"></div>
+              </div>
+            </div>
+            <div class="quota-scroll">
+              <div class="dial-row" id="quota-dials"></div>
+              <div id="quota-usage" class="stack"></div>
+              <p class="hint" id="quota-note"></p>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-head"><h2>蜂鸣器测试</h2></div>
+            <div class="button-row">
+              <select id="device-sound"></select>
+              <button class="ghost" id="device-play" type="button">播放</button>
+            </div>
+            <div class="card-head" style="margin-top:18px"><h2>休眠</h2></div>
+            <div class="button-row">
+              <button class="ghost" id="device-sleep" type="button">立即休眠</button>
+              <button class="ghost" id="device-rest" type="button" aria-pressed="false">关闭连接</button>
+            </div>
+          </article>
+        </div>
+        <article class="card">
+          <div class="card-head"><h2>参数</h2></div>
+          <div class="field-grid">
+            <label class="field"><span>基础亮度 <b id="out-base">0%</b></span><input type="range" id="dev-base" min="0" max="30" step="1"></label>
+            <label class="field"><span>最大亮度 <b id="out-max">30%</b></span><input type="range" id="dev-max" min="0" max="30" step="1"></label>
+            <label class="field"><span>动画帧率 <b id="out-frame">20 fps</b></span><input type="range" id="dev-frame" min="4" max="30" step="1"></label>
+            <label class="field"><span>休眠超时（秒）</span><input type="number" id="dev-sleep-timeout" min="5" max="65535"></label>
+            <label class="field"><span>屏幕旋转</span><select id="dev-rotation"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>
+            <label class="field"><span>提示音风格</span><select id="dev-sound-style"><option value="gentle">柔和</option><option value="standard">标准</option><option value="prominent">醒目</option></select></label>
+            <label class="field"><span>配额同步间隔（秒）</span><input type="number" id="dev-quota-interval" min="30" max="3600"></label>
+            <div class="field checks">
+              <label class="check"><input type="checkbox" id="dev-auto-sleep"><span>启用自动休眠</span></label>
+              <label class="check"><input type="checkbox" id="dev-keep-5v"><span>休眠时保持受控 5V</span></label>
+              <label class="check"><input type="checkbox" id="dev-quota-sync"><span>检测到屏幕时同步配额</span></label>
+            </div>
+          </div>
+          <p class="hint" id="dev-brightness-warn" hidden>基础亮度不能超过最大亮度。</p>
+          <div class="button-row"><button class="primary" id="save-device" type="button">应用设备设置</button></div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h2>设备状态</h2></div>
+          <pre class="code" id="device-detail">—</pre>
+        </article>
+      </section>
+
+      <!-- 自定义接入 -->
+      <section class="page" data-page="api" role="tabpanel">
+        <div class="page-head">
+          <h1>自定义接入</h1>
+        </div>
+        <article class="card">
+          <div class="field-grid">
+            <label class="field"><span>API 地址</span><input type="text" id="api-endpoint" readonly></label>
+            <label class="field"><span>访问令牌</span>
+              <div class="button-row">
+                <input type="password" id="api-token" readonly>
+                <button class="ghost small" id="reveal-token" type="button">显示</button>
+                <button class="ghost small" id="copy-token" type="button">复制</button>
+              </div>
+            </label>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h2>示例</h2></div>
+          <pre class="code" id="api-examples">—</pre>
+        </article>
+      </section>
+
+      <!-- 诊断日志 -->
+      <section class="page" data-page="logs" role="tabpanel">
+        <div class="page-head">
+          <h1>诊断日志</h1>
+        </div>
+        <article class="card">
+          <div class="button-row">
+            <label class="check"><input type="checkbox" id="log-follow" checked><span>实时跟随</span></label>
+            <button class="ghost" id="log-refresh" type="button">刷新</button>
+            <button class="ghost" id="log-export" type="button">导出</button>
+            <button class="ghost" id="open-logs" type="button">打开日志目录</button>
+            <button class="danger" id="log-clear" type="button">清空</button>
+          </div>
+          <pre class="code log-view" id="log-view">—</pre>
+        </article>
+      </section>
+
+      <!-- 通用设置 -->
+      <section class="page" data-page="settings" role="tabpanel">
+        <div class="page-head">
+          <h1>通用设置</h1>
+          <p>设置后台行为、状态超时和聚合优先级。数值越大，状态优先级越高。</p>
+        </div>
+        <article class="card">
+          <div class="field-grid">
+            <label class="field"><span>会话默认超时（秒）</span><input type="number" id="set-ttl" min="5" max="86400"></label>
+            <label class="field"><span>完成状态保持（秒）</span><input type="number" id="set-hold" min="0" max="3600"></label>
+            <label class="field"><span>强制重发间隔（秒）</span><input type="number" id="set-reapply" min="10" max="3600"></label>
+            <label class="field"><span>手动状态最长保持（秒）</span><input type="number" id="set-manual-timeout" min="5" max="3600"></label>
+            <label class="field"><span>多久没事件算存疑（秒）</span><input type="number" id="set-stale-after" min="0" max="7200"></label>
+            <label class="field"><span>配额自动刷新（秒）</span>
+              <span class="input-note">
+                <input type="number" class="no-spin" id="set-quota-refresh-interval" min="0" max="86400" step="1" aria-describedby="quota-refresh-note">
+                <button class="note-dot" type="button" id="quota-refresh-hint" aria-label="配额自动刷新的注意事项">!</button>
+                <span class="note-pop" id="quota-refresh-note" role="tooltip">
+                  填 <strong>0</strong> 关闭周期刷新，手动点「刷新」不受影响。<br>
+                  实际下限 <strong>Codex 15 秒</strong>、<strong>Claude 60 秒</strong>，填得再小也按下限走。
+                </span>
+              </span>
+            </label>
+            <label class="field"><span>本地服务端口</span>
+              <span class="input-note">
+                <input type="number" class="no-spin" id="set-api-port" min="1024" max="65535" step="1" aria-describedby="api-port-note">
+                <button class="note-dot" type="button" id="api-port-hint" aria-label="修改本地服务端口的注意事项">!</button>
+                <span class="note-pop" id="api-port-note" role="tooltip">
+                  修改后保存会自动重启，并跳转到新地址。<br>
+                  「自定义接入」中的 API 地址也会同步更新。
+                </span>
+              </span>
+            </label>
+            <label class="field"><span>夜间模式亮度 <b id="out-night">35%</b></span><input type="range" id="set-night-scale" min="5" max="100" step="5"></label>
+            <div class="field checks"><label class="check"><input type="checkbox" id="set-autostart"><span>随 Windows 登录启动</span></label></div>
+          </div>
+          <div class="card-head" style="margin-top:8px"><h2>状态优先级</h2></div>
+          <div class="field-grid" id="priority-grid"></div>
+          <div class="button-row">
+            <button class="primary" id="save-settings" type="button">保存通用设置</button>
+            <button class="danger" id="reset-profiles" type="button">恢复默认灯光设置</button>
+          </div>
+          <p class="hint">恢复默认只会重置九个状态的灯效档案，不影响设备参数、优先级和 Agent 集成。</p>
+        </article>
+        <article class="card">
+          <div class="card-head"><h2>关于</h2></div>
+          <p class="muted" id="about-text">—</p>
+          <div class="button-row">
+            <button class="ghost" id="open-install" type="button">打开安装目录</button>
+            <button class="danger" id="quit-app" type="button">退出后台</button>
+          </div>
+          <div class="about-danger">
+            <div>
+              <h3>卸载 AgentLight</h3>
+              <p>移除程序、Agent 集成和自启动项，默认保留用户设置与备份。</p>
+            </div>
+            <button class="danger" id="uninstall-app" type="button">卸载...</button>
+          </div>
+        </article>
+      </section>
+    </div>
+  </main>
+</div>
+<dialog class="confirm-dialog" id="uninstall-dialog" aria-labelledby="uninstall-title" aria-describedby="uninstall-description">
+  <form method="dialog" class="confirm-dialog-body">
+    <h2 id="uninstall-title">卸载 AgentLight？</h2>
+    <p id="uninstall-description">Windows 卸载程序即将打开。确认卸载后，灯光联动和当前 Web 页面会停止。</p>
+    <ul>
+      <li>程序文件、AgentLight 创建的 Hooks、Claude statusLine 和自启动项会被移除。</li>
+      <li>用户设置、日志与备份会保留，方便以后重新安装。</li>
+      <li>其他 Claude 或 Codex 配置不会被修改。</li>
+    </ul>
+    <div class="dialog-actions">
+      <button class="ghost" value="cancel" autofocus>取消</button>
+      <button class="danger" id="confirm-uninstall" type="button">打开卸载程序</button>
+    </div>
+  </form>
+</dialog>
+<script src="/assets/app.js"></script>
+</body>
+</html>
