@@ -1282,6 +1282,33 @@
   // 侧栏那颗设备指示灯常驻，「关闭连接」按钮在设备页 —— 两个都不属于总览。
   // 之前塞在 renderDashboard() 里，导致离开总览页后按钮状态再也不刷新，
   // 点了「关闭连接」文字不变、也变不回去，看起来就像功能是单向的。
+  // 勿扰时间和蜂鸣器静音是同一种东西：一个时段驱动一个开关。共用渲染和提交。
+  const SCHEDULES = [
+    { prefix: "rest-schedule", key: "device_rest_schedule", start: "23:00", end: "07:00", label: "勿扰时间" },
+    { prefix: "mute-schedule", key: "mute_schedule", start: "22:00", end: "08:00", label: "蜂鸣器静音" },
+  ];
+
+  function renderRestSchedule() {
+    const config = store.config;
+    if (!config) return;
+    for (const spec of SCHEDULES) {
+      const schedule = config[spec.key] || {};
+      const enabled = Boolean(schedule.enabled);
+      const toggle = $(`${spec.prefix}-toggle`);
+      const row = toggle.closest(".rest-schedule");
+      // 正在改的时候别回填，否则输入到一半会被服务端推来的旧值顶掉
+      const editing = document.activeElement && document.activeElement.closest
+        && document.activeElement.closest(".rest-schedule") === row;
+      if (!editing) {
+        $(`${spec.prefix}-start`).value = schedule.start || spec.start;
+        $(`${spec.prefix}-end`).value = schedule.end || spec.end;
+      }
+      toggle.setAttribute("aria-pressed", String(enabled));
+      toggle.textContent = enabled ? "✓ 已开启" : "开启";
+      row.classList.toggle("is-off", !enabled);
+    }
+  }
+
   function renderDeviceStatus() {
     const snap = store.snapshot;
     if (!snap) return;
@@ -1302,6 +1329,7 @@
     renderTopbar();
     paintManualControls();
     renderDeviceStatus();
+    renderRestSchedule();
     // 在页面分支之前记录，确保切换页面不会中断时间线。
     if (store.snapshot) recordTimeline(store.snapshot.state.effective.state);
     if (store.page === "dashboard") renderDashboard();
@@ -1527,6 +1555,28 @@
       const result = await run(() => api("POST", "/v1/device/sleep"));
       if (result) say(result.ok ? "✓ 设备已进入休眠" : "活动状态下保持唤醒，请先熄灭或暂停联动", !result.ok);
     });
+    for (const spec of SCHEDULES) {
+      const toggle = $(`${spec.prefix}-toggle`);
+      const save = async (enabled) => {
+        const start = $(`${spec.prefix}-start`).value;
+        const end = $(`${spec.prefix}-end`).value;
+        if (enabled && (!start || !end)) {
+          say("请先填好开始和结束时间", true);
+          return;
+        }
+        await run(() => api("PUT", "/v1/settings", {
+          [spec.key]: { enabled, start: start || spec.start, end: end || spec.end },
+        }), enabled ? `✓ ${spec.label} ${start} 至 ${end}` : `✓ 已关闭${spec.label}`);
+        await pullConfig();
+      };
+      toggle.addEventListener("click", () => save(toggle.getAttribute("aria-pressed") !== "true"));
+      for (const suffix of ["start", "end"]) {
+        // 改时间时保持当前开关状态，不要顺手把它打开
+        $(`${spec.prefix}-${suffix}`).addEventListener("change",
+          () => save(toggle.getAttribute("aria-pressed") === "true"));
+      }
+    }
+
     $("device-rest").addEventListener("click", async () => {
       const next = $("device-rest").getAttribute("aria-pressed") !== "true";
       await run(() => api("POST", "/v1/device/rest", { resting: next }),
@@ -1561,15 +1611,6 @@
       loadDraft(store.editing);
     });
 
-    const deviceSound = $("device-sound");
-    for (const value of SOUNDS) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = SOUND_LABELS[value];
-      deviceSound.append(option);
-    }
-    deviceSound.value = "beep";
-    $("device-play").addEventListener("click", () => run(() => api("POST", "/v1/sound", { sound: deviceSound.value }), "✓ 已发送提示音"));
 
     // 接入
     $("reveal-token").addEventListener("click", () => {

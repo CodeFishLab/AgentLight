@@ -111,3 +111,17 @@ def test_every_state_has_a_profile_and_a_priority() -> None:
     assert len(set(values)) == len(values)
     # 请求授权挡住了 agent，应当排在等待输入之上
     assert DEFAULT_CONFIG["priorities"]["permission"] > DEFAULT_CONFIG["priorities"]["attention"]
+
+
+def test_upgrading_never_silently_starts_muting_the_device_at_night(tmp_path) -> None:
+    """定时休息默认必须是关的。升级不能因为多了个功能就在半夜把设备静音掉。"""
+    from agentlight.config import CURRENT_SCHEMA_VERSION, ConfigManager
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"schemaVersion": 6, "muted": True}), encoding="utf-8")
+
+    snapshot = ConfigManager(path).snapshot()
+
+    assert snapshot["schemaVersion"] == CURRENT_SCHEMA_VERSION
+    assert snapshot["device_rest_schedule"]["enabled"] is False
+    assert snapshot["muted"] is True          # 原有设置不能被冲掉

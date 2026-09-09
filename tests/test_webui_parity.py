@@ -438,3 +438,65 @@ def test_restoring_auto_sits_beside_the_heading() -> None:
     assert ".manual-head { display: flex;" in css
     # aria-pressed 要覆盖挪出去的那个按钮，不能只查 chip 行
     assert 'host.closest(".manual-bar").querySelectorAll("button[data-manual-state]")' in source
+
+
+def test_the_rest_schedule_is_wired_end_to_end() -> None:
+    """三个控件、渲染、提交缺一不可 —— 少一环就是「设置了但不生效」。"""
+    html = read("index.html")
+    source = read("assets/app.js")
+    css = read("assets/app.css")
+
+    for prefix in ("rest-schedule", "mute-schedule"):
+        for suffix in ("toggle", "start", "end"):
+            assert f'id="{prefix}-{suffix}"' in html, f"{prefix}-{suffix}"
+    # 两个时段共用一张表和一套渲染/提交，别再各写一份
+    assert "const SCHEDULES = [" in source
+    assert '"device_rest_schedule"' in source and '"mute_schedule"' in source
+    assert "function renderRestSchedule()" in source
+    assert "renderRestSchedule();" in source
+    assert "device_rest_schedule" in source
+    assert ".rest-schedule {" in css
+    # 开关做成和「关闭连接」同款按钮，不是勾选框
+    assert 'id="rest-schedule-toggle" type="button" aria-pressed' in read("index.html")
+    assert "<h2>勿扰时间</h2>" in read("index.html")
+    assert "到点自动关闭连接" not in read("index.html")
+    # 蜂鸣器测试整块已按要求移除
+    assert "蜂鸣器测试" not in html and 'id="device-play"' not in html
+    assert "<h2>蜂鸣器静音设置</h2>" in html
+
+
+def test_the_schedule_inputs_are_not_clobbered_while_being_edited() -> None:
+    """服务端每秒推快照。正在输入时回填，会把你打到一半的时间顶掉。"""
+    source = read("assets/app.js")
+    block = source.split("function renderRestSchedule()")[1].split("function renderDeviceStatus")[0]
+
+    assert "document.activeElement" in block
+    assert 'closest(".rest-schedule")' in block
+
+
+def test_native_controls_follow_the_theme() -> None:
+    """不声明 color-scheme，浏览器一律按浅色画原生控件 —— 深色主题下时间输入的
+    数字、箭头和弹出的时钟面板全是白底，这正是它当初难看的原因。"""
+    css = read("assets/app.css")
+
+    assert "color-scheme: light;" in css
+    assert "color-scheme: dark;" in css
+    # 漏掉 time 就会一路裸奔到浏览器默认样式
+    assert 'input[type="time"], select {' in css
+
+
+def test_the_frontend_uses_the_verbs_the_api_actually_registers() -> None:
+    """写错动词是静默失败：界面照常提示成功，服务端回 405，设置根本没保存。
+    定时休息这条就踩过（写成 POST，实际是 PUT）。"""
+    import re
+    from pathlib import Path
+
+    api_source = Path(__file__).parents[1].joinpath("src/agentlight/api.py").read_text(encoding="utf-8")
+    registered: dict[str, set[str]] = {}
+    for verb, path in re.findall(r'web\.(get|post|put|delete)\("([^"]+)"', api_source):
+        registered.setdefault(path, set()).add(verb.upper())
+
+    source = read("assets/app.js")
+    for verb, path in re.findall(r'api\("(GET|POST|PUT|DELETE)",\s*"(/v1/[^"?]+)"', source):
+        if path in registered:
+            assert verb in registered[path], f"{verb} {path} 未注册，实际支持 {sorted(registered[path])}"

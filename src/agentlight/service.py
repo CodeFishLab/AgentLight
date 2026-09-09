@@ -34,6 +34,36 @@ VALID_SOUND_STYLES = {"gentle", "standard", "prominent"}
 SESSION_STATE_VERSION = 1
 
 
+def parse_clock(value: Any) -> int | None:
+    """把 "HH:MM" 解析成「当天第几分钟」。解析不了返回 None。"""
+    if not isinstance(value, str):
+        return None
+    parts = value.strip().split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        hour, minute = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return None
+    return hour * 60 + minute
+
+
+def within_window(now_minute: int, start: int, end: int) -> bool:
+    """now 是否落在 [start, end) 里，支持跨午夜。
+
+    夜间休息基本都是 23:00–07:00 这种跨午夜的写法，start < end 那套判断在这里
+    是错的，必须分开处理。start == end 视为空窗口（而不是整天），否则「起止相同」
+    会变成一个永远无法退出的状态。
+    """
+    if start == end:
+        return False
+    if start < end:
+        return start <= now_minute < end
+    return now_minute >= start or now_minute < end
+
+
 class AgentLightService:
     def __init__(
         self,
@@ -66,6 +96,10 @@ class AgentLightService:
         self._paused = bool(settings.get("paused", False))
         self._muted = bool(settings.get("muted", False))
         self._resting = bool(settings.get("device_resting", False))
+        # 上一次判定「是否在休息时段内」的结果。None 表示还没判过 —— 启动时
+        # 会因此立刻评估一次，否则 23:30 才打开开关的话要干等到 07:00 才生效。
+        self._in_rest_window: bool | None = None
+        self._in_mute_window: bool | None = None
         self._last_effective = EffectiveState("off")
         self._displayed_state = "off"
         self._runtime_sleep: tuple[bool, int, bool] | None = None
@@ -368,14 +402,21 @@ class AgentLightService:
         self._sync_runtime_sleep(force=True)
         self._notify()
 
-    def set_device_resting(self, resting: bool) -> None:
+    def set_device_resting(self, resting: bool, *, manual: bool = True) -> None:
         """关闭或恢复与设备的连接。
 
         和「暂停联动」是两回事：暂停只是不再跟着状态改灯，USB 上照样在轮询；
         休息会结束会话、让设备睡下，之后一条报文都不再发。想让设备彻底安静
         （比如夜里、或者拔了想省事）用这个。
+
+        `manual=False` 是调度自己在调。手动在勿扰时段内把设备开回来，会顺带把
+        勿扰关掉 —— 否则下一秒就被调度按回去，或者留下一个界面上看不见的例外。
         """
         resting = bool(resting)
+        if manual and not resting and self.inside_window("device_rest_schedule"):
+            self.logger.info("勿扰时段内手动恢复连接，同时关闭勿扰")
+            self.config.update({"device_rest_schedule": {**self.window_schedule("device_rest_schedule"), "enabled": False}})
+            self._in_rest_window = None
         if resting == self._resting:
             return
         self._cancel_preview()
@@ -391,8 +432,94 @@ class AgentLightService:
         self.logger.info("设备连接%s", "已关闭（休息）" if resting else "已恢复")
         self._notify()
 
-    def set_muted(self, muted: bool) -> None:
-        self._muted = bool(muted)
+    def rest_schedule(self) -> dict[str, Any]:
+        raw = self.config.get("device_rest_schedule", {}) or {}
+        return {
+            "enabled": bool(raw.get("enabled", False)),
+            "start": str(raw.get("start", "23:00")),
+            "end": str(raw.get("end", "07:00")),
+        }
+
+    def window_schedule(self, key: str) -> dict[str, Any]:
+        raw = self.config.get(key, {}) or {}
+        default = DEFAULT_CONFIG[key]
+        return {
+            "enabled": bool(raw.get("enabled", False)),
+            "start": str(raw.get("start", default["start"])),
+            "end": str(raw.get("end", default["end"])),
+        }
+
+    def inside_window(self, key: str, now: time.struct_time | None = None) -> bool:
+        """此刻是否落在某个时段内。时段没开或时间非法都算不在。"""
+        schedule = self.window_schedule(key)
+        if not schedule["enabled"]:
+            return False
+        start = parse_clock(schedule["start"])
+        end = parse_clock(schedule["end"])
+        if start is None or end is None or start == end:
+            return False
+        moment = now or time.localtime()
+        return within_window(moment.tm_hour * 60 + moment.tm_min, start, end)
+
+    def inside_rest_window(self, now: time.struct_time | None = None) -> bool:
+        return self.inside_window("device_rest_schedule", now)
+
+    def _run_window(
+        self,
+        key: str,
+        state_attr: str,
+        is_active: Callable[[], bool],
+        apply: Callable[[bool], None],
+        label: str,
+        now: time.struct_time | None = None,
+    ) -> None:
+        """时段内持续保持开启，离开时收尾。勿扰和静音共用这一套。
+
+        早先只在跨越边界那一刻动手，本意是别跟用户较劲。结果是：开关亮着、时间
+        也在区间内、状态却没生效 —— 界面完全看不出为什么，看起来就是坏了。
+        所以改成持续对齐。想临时反悔就手动改，那会顺带把这个时段关掉（见各自的
+        setter），把隐形的例外换成一个看得见的动作。
+        """
+        inside = self.inside_window(key, now)
+        if inside:
+            if not is_active():
+                schedule = self.window_schedule(key)
+                self.logger.info("%s时段 %s-%s 内，自动生效", label, schedule["start"], schedule["end"])
+                apply(True)
+        elif getattr(self, state_attr):
+            # 只有「我们开的」才由我们收尾。启动时就在窗外的话这个标志是 None，
+            # 不会误把用户自己设的状态改掉。
+            self.logger.info("离开%s时段，自动恢复", label)
+            apply(False)
+        setattr(self, state_attr, inside)
+
+    def _apply_schedules(self, now: time.struct_time | None = None) -> None:
+        """由 housekeeping 每秒调一次，把两个时段都对齐一遍。"""
+        self._run_window(
+            "device_rest_schedule", "_in_rest_window",
+            lambda: self._resting,
+            lambda value: self.set_device_resting(value, manual=False),
+            "勿扰", now,
+        )
+        self._run_window(
+            "mute_schedule", "_in_mute_window",
+            lambda: self._muted,
+            lambda value: self.set_muted(value, manual=False),
+            "蜂鸣器静音", now,
+        )
+
+    def set_muted(self, muted: bool, *, manual: bool = True) -> None:
+        """静音蜂鸣器。
+
+        `manual=False` 是调度自己在调。手动在静音时段内取消静音，会顺带把这个
+        时段关掉 —— 否则下一秒就被调度按回去，留下一个界面上看不见的例外。
+        """
+        muted = bool(muted)
+        if manual and not muted and self.inside_window("mute_schedule"):
+            self.logger.info("静音时段内手动取消静音，同时关闭静音时段")
+            self.config.update({"mute_schedule": {**self.window_schedule("mute_schedule"), "enabled": False}})
+            self._in_mute_window = None
+        self._muted = muted
         self.config.update({"muted": self._muted})
         if self._muted:
             self.hardware.command("sound", "stop", "standard")
@@ -420,6 +547,21 @@ class AgentLightService:
             self._apply_hardware(current, force=True, silent=True)
         self._notify()
 
+    @staticmethod
+    def _clean_window_schedule(raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, dict):
+            raise ValueError("时段设置必须是对象")
+        start, end = parse_clock(raw.get("start")), parse_clock(raw.get("end"))
+        if start is None or end is None:
+            raise ValueError("时段的起止时间必须是 HH:MM")
+        if start == end and bool(raw.get("enabled")):
+            raise ValueError("时段的起止时间不能相同")
+        return {
+            "enabled": bool(raw.get("enabled", False)),
+            "start": f"{start // 60:02d}:{start % 60:02d}",
+            "end": f"{end // 60:02d}:{end % 60:02d}",
+        }
+
     def update_runtime_settings(self, values: dict[str, Any]) -> None:
         self._cancel_preview()
         normalized = copy.deepcopy(values)
@@ -434,6 +576,9 @@ class AgentLightService:
             if interval != raw_interval or not 0 <= interval <= 86400:
                 raise ValueError("配额自动刷新间隔必须是 0 到 86400 之间的整数")
             normalized["quota_refresh_interval_seconds"] = interval
+        for key in ("device_rest_schedule", "mute_schedule"):
+            if key in normalized:
+                normalized[key] = self._clean_window_schedule(normalized[key])
         updated = self.config.update(normalized)
         self._paused = bool(updated.get("paused", False))
         was_muted = self._muted
@@ -451,6 +596,10 @@ class AgentLightService:
             current = self.arbitrator.snapshot()["effective"]["state"]
             self._apply_hardware(current, force=True, silent=True)
         self._sync_runtime_sleep(force=True)
+        # 改完设置立刻重判一次：23:30 打开一个 23:00 开始的窗口，应当马上生效
+        self._in_rest_window = None
+        self._in_mute_window = None
+        self._apply_schedules()
         interval = int(updated.get("quota_refresh_interval_seconds", 300))
         self.claude_quota.configure(interval)
         self._notify()
@@ -639,6 +788,7 @@ class AgentLightService:
             if before != after:
                 self._notify()
             self._maybe_sync_codex_quota()
+            self._apply_schedules()
 
     def shutdown(self) -> None:
         self._cancel_preview()

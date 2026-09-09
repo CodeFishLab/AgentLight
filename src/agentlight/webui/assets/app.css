@@ -2,6 +2,7 @@
    动画只驱动 opacity / transform / background-color，避免每帧重算 filter 与布局。 */
 
 :root {
+  color-scheme: light;
   --bg: #f4f6f8;
   --bg-deep: #e9edf1;
   --surface: #ffffff;
@@ -23,6 +24,9 @@
 }
 
 [data-theme="dark"] {
+  /* 这一行才是时间输入在深色下好看的关键：原生控件跟着一起变深，
+     不用去 hack ::-webkit-* 伪元素 */
+  color-scheme: dark;
   --bg: #0b1116;
   --bg-deep: #070c10;
   --surface: #121b22;
@@ -334,7 +338,7 @@ button:disabled { cursor: wait; opacity: .55; transform: none; }
 p + .button-row,
 .code + .button-row { margin-top: 16px; }
 
-input[type="text"], input[type="password"], input[type="number"], select {
+input[type="text"], input[type="password"], input[type="number"], input[type="time"], select {
   font: inherit;
   padding: 8px 11px;
   border-radius: var(--radius-sm);
@@ -621,6 +625,24 @@ input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 .manual-bar h2 { flex: none; }
 /* 「恢复自动」不是一个状态，是「退出手动模式」—— 另一类动作，所以拎到标题这一行，
    和下面那排状态分开。顺带把 chip 行从 11 个减到 10 个，换行的临界点往后推。 */
+/* 勿扰时间：「时间 至 时间  [开启]」排成一行，开关紧跟在时段右边 */
+.rest-schedule { margin-top: 2px; }
+.rest-schedule-times { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* 开关跟时段之间拉开一点，别看着像时间的一部分 */
+.rest-schedule-times #rest-schedule-toggle { margin-left: 6px; }
+.rest-schedule-times input[type="time"] {
+  /* 时间内容宽度固定，让它按内容收窄而不是撑满整行 */
+  flex: 0 0 auto; width: auto; min-width: 108px;
+  /* 这两个不在 .field 里，拿不到那 12.5px，不写死就会比同页其它输入框大一号 */
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums; letter-spacing: .3px;
+}
+.rest-schedule-sep { color: var(--text-faint); font-size: 12.5px; flex: none; }
+/* 关掉时压暗时间，表示它们此刻不起作用。但**不能**压暗开关本身 ——
+   那是你唯一能点回来的控件，压暗了看着像禁用。 */
+.rest-schedule.is-off .rest-schedule-times input[type="time"],
+.rest-schedule.is-off .rest-schedule-sep { opacity: .45; }
+
 .manual-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .manual-bar .chip-row { flex: 1 1 auto; }
 

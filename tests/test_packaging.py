@@ -57,3 +57,22 @@ def test_no_file_still_forbids_redistribution() -> None:
 def test_unused_vendored_module_is_gone() -> None:
     """default_cli.py 有 532 行且无任何引用，开源前不该带着走。"""
     assert not (ROOT / "src" / "agentlight" / "vendor" / "default_cli.py").exists()
+
+
+def test_every_place_that_declares_a_version_agrees() -> None:
+    """版本号散在三个文件里，漏改一处不会报错，只会在装完之后显示成旧版本。
+    上一次就漏了 pyproject.toml。"""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    found = {
+        "__init__.py": re.search(r'__version__ = "([^"]+)"',
+                                 (root / "src/agentlight/__init__.py").read_text(encoding="utf-8")).group(1),
+        "pyproject.toml": re.search(r'^version = "([^"]+)"',
+                                    (root / "pyproject.toml").read_text(encoding="utf-8"), re.M).group(1),
+        "AgentLight.iss": re.search(r'#define MyAppVersion "([^"]+)"',
+                                    (root / "installer/AgentLight.iss").read_text(encoding="utf-8")).group(1),
+    }
+
+    assert len(set(found.values())) == 1, found

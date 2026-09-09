@@ -10,7 +10,7 @@ from typing import Any
 from .paths import config_path
 
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 LOOPBACK_HOST = "127.0.0.1"
 
 
@@ -73,6 +73,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "paused": False,
     # 用户主动关闭了与设备的连接，让它休息。跨重启保留，否则一重启就又被叫醒
     "device_resting": False,
+    # 定时休息：到点自动关闭/恢复设备连接。start 晚于 end 表示跨过午夜（夜间场景
+    # 基本都是这样）。只在跨越边界的那一刻动手，所以窗口内你手动开回来它不会一直抢。
+    "device_rest_schedule": {"enabled": False, "start": "23:00", "end": "07:00"},
+    # 蜂鸣器静音时段。和勿扰时间同一套引擎，只是作用在 muted 上。
+    "mute_schedule": {"enabled": False, "start": "22:00", "end": "08:00"},
     "start_with_windows": True,
     "api": {"host": "127.0.0.1", "port": 47651, "token": ""},
     "device": {
@@ -123,6 +128,10 @@ def _migrate(data: dict[str, Any]) -> dict[str, Any]:
         api = copy.deepcopy(DEFAULT_CONFIG["api"])
         data["api"] = api
     api["host"] = LOOPBACK_HOST
+    if version < 7:
+        # 老配置没有定时休息。默认关闭，不能因为升级就在半夜把设备静音掉。
+        data.setdefault("device_rest_schedule", copy.deepcopy(DEFAULT_CONFIG["device_rest_schedule"]))
+        data.setdefault("mute_schedule", copy.deepcopy(DEFAULT_CONFIG["mute_schedule"]))
     data["schemaVersion"] = CURRENT_SCHEMA_VERSION
     return data
 

@@ -255,15 +255,28 @@
             </div>
           </article>
           <article class="card">
-            <div class="card-head"><h2>蜂鸣器测试</h2></div>
-            <div class="button-row">
-              <select id="device-sound"></select>
-              <button class="ghost" id="device-play" type="button">播放</button>
+            <div class="card-head"><h2>蜂鸣器静音设置</h2></div>
+            <div class="rest-schedule">
+              <div class="rest-schedule-times">
+                <input type="time" id="mute-schedule-start" aria-label="静音开始时间">
+                <span class="rest-schedule-sep">至</span>
+                <input type="time" id="mute-schedule-end" aria-label="静音结束时间">
+                <button class="ghost" id="mute-schedule-toggle" type="button" aria-pressed="false">开启</button>
+              </div>
             </div>
             <div class="card-head" style="margin-top:18px"><h2>休眠</h2></div>
             <div class="button-row">
               <button class="ghost" id="device-sleep" type="button">立即休眠</button>
               <button class="ghost" id="device-rest" type="button" aria-pressed="false">关闭连接</button>
+            </div>
+            <div class="card-head" style="margin-top:18px"><h2>勿扰时间</h2></div>
+            <div class="rest-schedule">
+              <div class="rest-schedule-times">
+                <input type="time" id="rest-schedule-start" aria-label="勿扰开始时间">
+                <span class="rest-schedule-sep">至</span>
+                <input type="time" id="rest-schedule-end" aria-label="勿扰结束时间">
+                <button class="ghost" id="rest-schedule-toggle" type="button" aria-pressed="false">开启</button>
+              </div>
             </div>
           </article>
         </div>
