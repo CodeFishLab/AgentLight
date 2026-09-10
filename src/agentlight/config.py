@@ -76,7 +76,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # 定时休息：到点自动关闭/恢复设备连接。start 晚于 end 表示跨过午夜（夜间场景
     # 基本都是这样）。只在跨越边界的那一刻动手，所以窗口内你手动开回来它不会一直抢。
     "device_rest_schedule": {"enabled": False, "start": "23:00", "end": "07:00"},
-    # 蜂鸣器静音时段。和勿扰时间同一套引擎，只是作用在 muted 上。
+    # 蜂鸣器静音时段。和状态灯关闭时段同一套引擎，只是作用在 muted 上。
     "mute_schedule": {"enabled": False, "start": "22:00", "end": "08:00"},
     "start_with_windows": True,
     "api": {"host": "127.0.0.1", "port": 47651, "token": ""},

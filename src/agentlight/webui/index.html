@@ -264,19 +264,28 @@
                 <button class="ghost" id="mute-schedule-toggle" type="button" aria-pressed="false">开启</button>
               </div>
             </div>
-            <div class="card-head" style="margin-top:18px"><h2>休眠</h2></div>
+            <div class="card-head"><h2>状态灯关闭设置</h2></div>
+            <div class="rest-schedule">
+              <div class="rest-schedule-times">
+                <input type="time" id="rest-schedule-start" aria-label="状态灯关闭开始时间">
+                <span class="rest-schedule-sep">至</span>
+                <input type="time" id="rest-schedule-end" aria-label="状态灯关闭结束时间">
+                <button class="ghost" id="rest-schedule-toggle" type="button" aria-pressed="false">开启</button>
+              </div>
+            </div>
+            <div class="card-head"><h2>休眠</h2></div>
+            <div class="rest-schedule">
+              <div class="rest-schedule-times">
+                <span class="rest-schedule-span">
+                  <span class="rest-schedule-sep">无任务</span>
+                  <select id="idle-sleep-minutes" aria-label="空闲多久后自动休眠"></select>
+                  <span class="rest-schedule-sep">后休眠</span>
+                </span>
+              </div>
+            </div>
             <div class="button-row">
               <button class="ghost" id="device-sleep" type="button">立即休眠</button>
               <button class="ghost" id="device-rest" type="button" aria-pressed="false">关闭连接</button>
-            </div>
-            <div class="card-head" style="margin-top:18px"><h2>勿扰时间</h2></div>
-            <div class="rest-schedule">
-              <div class="rest-schedule-times">
-                <input type="time" id="rest-schedule-start" aria-label="勿扰开始时间">
-                <span class="rest-schedule-sep">至</span>
-                <input type="time" id="rest-schedule-end" aria-label="勿扰结束时间">
-                <button class="ghost" id="rest-schedule-toggle" type="button" aria-pressed="false">开启</button>
-              </div>
             </div>
           </article>
         </div>
@@ -286,12 +295,10 @@
             <label class="field"><span>基础亮度 <b id="out-base">0%</b></span><input type="range" id="dev-base" min="0" max="30" step="1"></label>
             <label class="field"><span>最大亮度 <b id="out-max">30%</b></span><input type="range" id="dev-max" min="0" max="30" step="1"></label>
             <label class="field"><span>动画帧率 <b id="out-frame">20 fps</b></span><input type="range" id="dev-frame" min="4" max="30" step="1"></label>
-            <label class="field"><span>休眠超时（秒）</span><input type="number" id="dev-sleep-timeout" min="5" max="65535"></label>
             <label class="field"><span>屏幕旋转</span><select id="dev-rotation"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>
             <label class="field"><span>提示音风格</span><select id="dev-sound-style"><option value="gentle">柔和</option><option value="standard">标准</option><option value="prominent">醒目</option></select></label>
             <label class="field"><span>配额同步间隔（秒）</span><input type="number" id="dev-quota-interval" min="30" max="3600"></label>
             <div class="field checks">
-              <label class="check"><input type="checkbox" id="dev-auto-sleep"><span>启用自动休眠</span></label>
               <label class="check"><input type="checkbox" id="dev-keep-5v"><span>休眠时保持受控 5V</span></label>
               <label class="check"><input type="checkbox" id="dev-quota-sync"><span>检测到屏幕时同步配额</span></label>
             </div>

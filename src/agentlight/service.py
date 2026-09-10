@@ -409,12 +409,12 @@ class AgentLightService:
         休息会结束会话、让设备睡下，之后一条报文都不再发。想让设备彻底安静
         （比如夜里、或者拔了想省事）用这个。
 
-        `manual=False` 是调度自己在调。手动在勿扰时段内把设备开回来，会顺带把
-        勿扰关掉 —— 否则下一秒就被调度按回去，或者留下一个界面上看不见的例外。
+        `manual=False` 是调度自己在调。手动在状态灯关闭时段内把设备开回来，会顺带把
+        这个时段关掉 —— 否则下一秒就被调度按回去，或者留下一个界面上看不见的例外。
         """
         resting = bool(resting)
         if manual and not resting and self.inside_window("device_rest_schedule"):
-            self.logger.info("勿扰时段内手动恢复连接，同时关闭勿扰")
+            self.logger.info("状态灯关闭时段内手动恢复连接，同时关闭该时段")
             self.config.update({"device_rest_schedule": {**self.window_schedule("device_rest_schedule"), "enabled": False}})
             self._in_rest_window = None
         if resting == self._resting:
@@ -473,7 +473,7 @@ class AgentLightService:
         label: str,
         now: time.struct_time | None = None,
     ) -> None:
-        """时段内持续保持开启，离开时收尾。勿扰和静音共用这一套。
+        """时段内持续保持开启，离开时收尾。状态灯关闭和静音共用这一套。
 
         早先只在跨越边界那一刻动手，本意是别跟用户较劲。结果是：开关亮着、时间
         也在区间内、状态却没生效 —— 界面完全看不出为什么，看起来就是坏了。
@@ -499,7 +499,7 @@ class AgentLightService:
             "device_rest_schedule", "_in_rest_window",
             lambda: self._resting,
             lambda value: self.set_device_resting(value, manual=False),
-            "勿扰", now,
+            "状态灯关闭", now,
         )
         self._run_window(
             "mute_schedule", "_in_mute_window",

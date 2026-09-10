@@ -1,5 +1,5 @@
 #define MyAppName "Agent 状态灯"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.4.1"
 #define MyAppPublisher "AgentLight"
 #define MyAppExeName "AgentLight.exe"
 ; 脚本位于 installer\，仓库根就是它的上一级；克隆到任意位置都能编译。

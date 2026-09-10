@@ -1050,11 +1050,11 @@
     $("out-base").textContent = `${device.base_brightness}%`;
     $("out-max").textContent = `${device.max_brightness}%`;
     $("out-frame").textContent = `${device.frame_rate} fps`;
-    $("dev-sleep-timeout").value = String(device.sleep_timeout);
+
     $("dev-rotation").value = String(device.screen_rotation);
     $("dev-sound-style").value = device.sound_style;
     $("dev-quota-interval").value = String(device.quota_sync_interval);
-    $("dev-auto-sleep").checked = Boolean(device.auto_sleep);
+
     $("dev-keep-5v").checked = Boolean(device.keep_5v);
     $("dev-quota-sync").checked = Boolean(device.codex_quota_sync);
   }
@@ -1282,9 +1282,9 @@
   // 侧栏那颗设备指示灯常驻，「关闭连接」按钮在设备页 —— 两个都不属于总览。
   // 之前塞在 renderDashboard() 里，导致离开总览页后按钮状态再也不刷新，
   // 点了「关闭连接」文字不变、也变不回去，看起来就像功能是单向的。
-  // 勿扰时间和蜂鸣器静音是同一种东西：一个时段驱动一个开关。共用渲染和提交。
+  // 状态灯关闭和蜂鸣器静音是同一种东西：一个时段驱动一个开关。共用渲染和提交。
   const SCHEDULES = [
-    { prefix: "rest-schedule", key: "device_rest_schedule", start: "23:00", end: "07:00", label: "勿扰时间" },
+    { prefix: "rest-schedule", key: "device_rest_schedule", start: "23:00", end: "07:00", label: "状态灯关闭" },
     { prefix: "mute-schedule", key: "mute_schedule", start: "22:00", end: "08:00", label: "蜂鸣器静音" },
   ];
 
@@ -1309,6 +1309,35 @@
     }
   }
 
+  // 5–30 分钟，5 分钟一档。设备固件收的是秒。
+  const IDLE_SLEEP_MINUTES = [5, 10, 15, 20, 25, 30];
+  // 下拉里的「不启用」。用空串而不是 0，免得跟一个真的时长混淆。
+  const IDLE_SLEEP_OFF = "";
+
+  function renderIdleSleep() {
+    const device = store.config && store.config.device;
+    if (!device) return;
+    const select = $("idle-sleep-minutes");
+    if (!select.options.length) {
+      // 「--」本身就表达不启用，不用再配一个开关按钮
+      for (const [value, text] of [[IDLE_SLEEP_OFF, "--"], ...IDLE_SLEEP_MINUTES.map((m) => [String(m), `${m} 分钟`])]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = text;
+        select.append(option);
+      }
+    }
+    if (document.activeElement === select) return;
+    if (!device.auto_sleep) {
+      select.value = IDLE_SLEEP_OFF;
+      return;
+    }
+    // 落到最近的一档：配置里存的是秒，可能是旧版本写进去的任意值
+    const minutes = Math.round(Number(device.sleep_timeout || 300) / 60);
+    select.value = String(IDLE_SLEEP_MINUTES.reduce(
+      (best, item) => (Math.abs(item - minutes) < Math.abs(best - minutes) ? item : best)));
+  }
+
   function renderDeviceStatus() {
     const snap = store.snapshot;
     if (!snap) return;
@@ -1330,6 +1359,7 @@
     paintManualControls();
     renderDeviceStatus();
     renderRestSchedule();
+    renderIdleSleep();
     // 在页面分支之前记录，确保切换页面不会中断时间线。
     if (store.snapshot) recordTimeline(store.snapshot.state.effective.state);
     if (store.page === "dashboard") renderDashboard();
@@ -1541,11 +1571,9 @@
         base_brightness: base,
         max_brightness: max,
         frame_rate: Number($("dev-frame").value),
-        sleep_timeout: Number($("dev-sleep-timeout").value),
         screen_rotation: Number($("dev-rotation").value),
         sound_style: $("dev-sound-style").value,
         quota_sync_interval: Number($("dev-quota-interval").value),
-        auto_sleep: $("dev-auto-sleep").checked,
         keep_5v: $("dev-keep-5v").checked,
         codex_quota_sync: $("dev-quota-sync").checked,
       }), "✓ 设备设置已生效");
@@ -1576,6 +1604,18 @@
           () => save(toggle.getAttribute("aria-pressed") === "true"));
       }
     }
+
+    $("idle-sleep-minutes").addEventListener("change", async () => {
+      const raw = $("idle-sleep-minutes").value;
+      const enabled = raw !== IDLE_SLEEP_OFF;
+      const minutes = enabled ? Number(raw) : IDLE_SLEEP_MINUTES[0];
+      await run(() => api("PUT", "/v1/device", {
+        auto_sleep: enabled,
+        // 关闭时不动时长，下次选回来还是原来那档
+        sleep_timeout: minutes * 60,
+      }), enabled ? `✓ 无任务 ${minutes} 分钟后自动休眠` : "✓ 已关闭自动休眠");
+      await pullConfig();
+    });
 
     $("device-rest").addEventListener("click", async () => {
       const next = $("device-rest").getAttribute("aria-pressed") !== "true";

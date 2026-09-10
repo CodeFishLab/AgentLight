@@ -458,7 +458,7 @@ def test_the_rest_schedule_is_wired_end_to_end() -> None:
     assert ".rest-schedule {" in css
     # 开关做成和「关闭连接」同款按钮，不是勾选框
     assert 'id="rest-schedule-toggle" type="button" aria-pressed' in read("index.html")
-    assert "<h2>勿扰时间</h2>" in read("index.html")
+    assert "<h2>状态灯关闭设置</h2>" in read("index.html")
     assert "到点自动关闭连接" not in read("index.html")
     # 蜂鸣器测试整块已按要求移除
     assert "蜂鸣器测试" not in html and 'id="device-play"' not in html
@@ -500,3 +500,71 @@ def test_the_frontend_uses_the_verbs_the_api_actually_registers() -> None:
     for verb, path in re.findall(r'api\("(GET|POST|PUT|DELETE)",\s*"(/v1/[^"?]+)"', source):
         if path in registered:
             assert verb in registered[path], f"{verb} {path} 未注册，实际支持 {sorted(registered[path])}"
+
+
+def test_the_two_schedules_sit_together_above_the_manual_actions() -> None:
+    """两个时段设置挨在一起，手动动作（立即休眠 / 关闭连接）沉到底部 ——
+    读起来是「先设规则，再放手动操作」。"""
+    html = read("index.html")
+
+    assert html.index("<h2>蜂鸣器静音设置</h2>") < html.index("<h2>状态灯关闭设置</h2>") < html.index("<h2>休眠</h2>")
+
+
+def test_idle_sleep_reuses_the_existing_firmware_setting() -> None:
+    """不要为「空闲多久后休眠」再造一套机制 —— device.auto_sleep + sleep_timeout
+    已经在做这件事（_sync_runtime_sleep 只在 state==off 或已暂停时放行，
+    也就是「没有任务状态」）。这里只是把它换成看得懂的说法。"""
+    html = read("index.html")
+    source = read("assets/app.js")
+
+    assert 'id="idle-sleep-minutes"' in html
+    assert "const IDLE_SLEEP_MINUTES = [5, 10, 15, 20, 25, 30];" in source
+    assert "sleep_timeout: minutes * 60" in source          # 界面给分钟，固件收秒
+    assert "auto_sleep: enabled" in source
+
+
+def test_the_old_raw_sleep_controls_are_gone() -> None:
+    """两处控同一个值，改了这边那边不动，最后谁也说不清生效的是哪个。"""
+    html = read("index.html")
+    source = read("assets/app.js")
+
+    for stale in ('id="dev-sleep-timeout"', 'id="dev-auto-sleep"'):
+        assert stale not in html, stale
+        assert stale.split('"')[1] not in source, stale
+    assert "休眠超时（秒）" not in html
+
+
+def test_idle_sleep_uses_a_dash_option_instead_of_a_toggle() -> None:
+    """下拉里的「--」本身就表达不启用，再配一个开关按钮是重复。"""
+    html = read("index.html")
+    source = read("assets/app.js")
+    block = html.split("<h2>休眠</h2>")[1]
+
+    assert 'class="rest-schedule"' in block
+    assert "idle-sleep-toggle" not in html and "idle-sleep-toggle" not in source
+    assert 'const IDLE_SLEEP_OFF = "";' in source
+    assert '"--"' in source
+    # 选到「--」就是关闭；用空串而不是 0，免得跟一个真的时长混淆
+    assert "const enabled = raw !== IDLE_SLEEP_OFF;" in source
+
+
+def test_the_three_device_rows_share_one_grid_so_they_line_up() -> None:
+    """每行是各自独立的栅格容器，只要有一列是 auto，它就会按各自内容算宽 ——
+    结果就是「至」和开关在行与行之间左右错位。所有列都得定宽。"""
+    css = read("assets/app.css")
+
+    assert "grid-template-columns: 96px 20px 96px 1fr;" in css
+    assert 'input[type="time"] {' in css and "width: 96px;" in css
+    # 空闲休眠那行结构不同，靠跨列让开关照样落在第四列
+    assert ".rest-schedule-span { grid-column: 1 / 4;" in css
+
+
+def test_section_spacing_lives_in_css_not_inline_styles() -> None:
+    """原来靠 style="margin-top:18px" 一处处手写，改一个值要翻遍 HTML，
+    而且第一个分区没有、后面的有，节奏本身就不齐。"""
+    html = read("index.html")
+    css = read("assets/app.css")
+
+    assert 'style="margin-top:18px"' not in html
+    assert ".rest-schedule + .card-head," in css
+    assert ".button-row + .card-head," in css
