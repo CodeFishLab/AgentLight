@@ -160,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         state_provider=lambda: tray_state(service),
     )
     tray.start()
+    service.attach_hotkey(tray.set_hotkey)
 
     def on_change(snapshot: dict[str, Any]) -> None:
         effective = snapshot["state"]["effective"]

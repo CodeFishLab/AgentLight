@@ -79,6 +79,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # 蜂鸣器静音时段。和状态灯关闭时段同一套引擎，只是作用在 muted 上。
     "mute_schedule": {"enabled": False, "start": "22:00", "end": "08:00"},
     "start_with_windows": True,
+    # 全局快捷键：在任何程序里按下都打开配置页，效果等同单击托盘图标
+    "hotkey": {"enabled": True, "combo": "Ctrl+Alt+L"},
     "api": {"host": "127.0.0.1", "port": 47651, "token": ""},
     "device": {
         "base_brightness": 0,

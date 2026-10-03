@@ -1059,9 +1059,33 @@
     $("dev-quota-sync").checked = Boolean(device.codex_quota_sync);
   }
 
+  function renderHotkeyStatus() {
+    const error = store.snapshot && store.snapshot.hotkey ? store.snapshot.hotkey.error : null;
+    const status = $("hotkey-status");
+    status.textContent = error || "";
+    status.hidden = !error;
+  }
+
+  // 只认 Ctrl/Alt/Win + 字母、数字或 F1–F24，和后端 hotkey.parse_combo 的规则一致
+  function hotkeyFromEvent(event) {
+    const modifiers = [];
+    if (event.ctrlKey) modifiers.push("Ctrl");
+    if (event.altKey) modifiers.push("Alt");
+    if (event.shiftKey) modifiers.push("Shift");
+    if (event.metaKey) modifiers.push("Win");
+    const code = event.code || "";
+    let key = null;
+    if (/^Key[A-Z]$/.test(code)) key = code.slice(3);
+    else if (/^Digit[0-9]$/.test(code)) key = code.slice(5);
+    else if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) key = code;
+    const strong = event.ctrlKey || event.altKey || event.metaKey;
+    return { preview: [...modifiers, key || "…"].join("+"), combo: key && strong ? [...modifiers, key].join("+") : null };
+  }
+
   function renderSettings() {
     const config = store.config;
     if (!config) return;
+    renderHotkeyStatus();
     if (store.pageRefreshing && store.page === "settings") return;
     if (document.activeElement && document.activeElement.closest && document.activeElement.closest(".page[data-page=settings]")) return;
     $("set-ttl").value = String(config.default_ttl_seconds);
@@ -1075,6 +1099,10 @@
     $("set-night-scale").value = String(scale);
     $("out-night").textContent = `${scale}%`;
     $("set-autostart").checked = Boolean(store.autostart);
+    const hotkey = config.hotkey || { enabled: false, combo: "" };
+    $("set-hotkey").value = hotkey.combo;
+    $("set-hotkey").dataset.combo = hotkey.combo;
+    $("set-hotkey-enabled").checked = Boolean(hotkey.enabled);
 
     const grid = $("priority-grid");
     if (grid.children.length !== STATES.length) {
@@ -1708,7 +1736,12 @@
       for (const input of $("priority-grid").querySelectorAll("input")) {
         priorities[input.dataset.state] = Number(input.value);
       }
+      const hotkey = { enabled: $("set-hotkey-enabled").checked, combo: $("set-hotkey").dataset.combo };
+      const savedHotkey = store.config.hotkey || {};
+      // 只在改过时才发：启动时就被占用的快捷键不该连累其他设置保存不了
+      const hotkeyChanged = hotkey.enabled !== Boolean(savedHotkey.enabled) || hotkey.combo !== savedHotkey.combo;
       const result = await run(() => api("PUT", "/v1/settings", {
+        ...(hotkeyChanged ? { hotkey } : {}),
         start_with_windows: $("set-autostart").checked,
         default_ttl_seconds: Number($("set-ttl").value),
         done_hold_seconds: Number($("set-hold").value),
@@ -1735,6 +1768,35 @@
         const restarted = await run(() => api("POST", "/v1/restart"), `端口已改为 ${result.apiPort}，正在重启...`);
         if (restarted) setTimeout(() => location.replace(nextUrl), 1800);
       }
+    });
+
+    // 快捷键录制：聚焦后按下组合键即记录，Esc 放弃
+    const hotkeyInput = $("set-hotkey");
+    hotkeyInput.addEventListener("focus", () => {
+      hotkeyInput.value = "";
+      hotkeyInput.placeholder = "按下组合键，Esc 取消";
+    });
+    hotkeyInput.addEventListener("blur", () => {
+      hotkeyInput.value = hotkeyInput.dataset.combo || "";
+      hotkeyInput.placeholder = "点击后按下组合键";
+    });
+    hotkeyInput.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") return;
+      event.preventDefault();
+      if (event.key === "Escape") {
+        hotkeyInput.blur();
+        return;
+      }
+      const { preview, combo } = hotkeyFromEvent(event);
+      hotkeyInput.value = preview;
+      if (combo) {
+        hotkeyInput.dataset.combo = combo;
+        hotkeyInput.blur();
+      }
+    });
+    hotkeyInput.addEventListener("keyup", () => {
+      // 只按了修饰键就松开：清掉「Ctrl+…」这类半截预览
+      if (document.activeElement === hotkeyInput) hotkeyInput.value = "";
     });
 
     $("quit-app").addEventListener("click", () => {

@@ -395,6 +395,13 @@ input[type="text"], input[type="password"], input[type="number"], input[type="ti
   .dialog-actions button { width: 100%; }
 }
 
+/* 快捷键录制框：只读文本框 + 启用开关同一行，占用提示在下面单独一行 */
+.hotkey-row { display: flex; align-items: center; gap: 12px; }
+.hotkey-row .hotkey-input { flex: 1; min-width: 0; cursor: pointer; font-variant-numeric: tabular-nums; }
+.hotkey-row .hotkey-input:focus { cursor: text; border-color: var(--accent); }
+.hotkey-row .check { flex: none; }
+.hotkey-status { color: var(--warn); font-size: 12px; line-height: 1.5; }
+
 .checks { display: flex; flex-direction: column; gap: 9px; justify-content: center; }
 .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-dim); font-size: 13px; }
 .check input { accent-color: var(--accent); width: 15px; height: 15px; }

@@ -568,3 +568,14 @@ def test_section_spacing_lives_in_css_not_inline_styles() -> None:
     assert 'style="margin-top:18px"' not in html
     assert ".rest-schedule + .card-head," in css
     assert ".button-row + .card-head," in css
+
+
+def test_settings_page_carries_the_global_hotkey_controls() -> None:
+    html = read("index.html")
+    source = read("assets/app.js")
+
+    for element_id in ("set-hotkey", "set-hotkey-enabled", "hotkey-status"):
+        assert f'id="{element_id}"' in html, element_id
+    # 只在改过时才把 hotkey 发给后端，避免启动时就被占用的组合连累其他设置
+    assert "hotkeyChanged ? { hotkey }" in source
+    assert "snapshot.hotkey" in source

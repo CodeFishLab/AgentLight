@@ -50,6 +50,12 @@ WM_COMMAND = 0x0111
 WM_APP = 0x8000
 WM_TRAY = WM_APP + 1
 WM_RETIP = WM_APP + 2
+WM_SET_HOTKEY = WM_APP + 3
+WM_HOTKEY = 0x0312
+
+HOTKEY_ID = 1
+MOD_NOREPEAT = 0x4000  # 按住不放只触发一次，不然会连开一串标签页
+SMTO_ABORTIFHUNG = 0x0002
 
 WM_LBUTTONDBLCLK = 0x0203
 WM_RBUTTONUP = 0x0205
@@ -135,6 +141,11 @@ user32.TrackPopupMenu.argtypes = [
     ctypes.c_int, wintypes.HWND, ctypes.c_void_p,
 ]
 user32.LoadImageW.restype = wintypes.HANDLE
+user32.SendMessageTimeoutW.restype = LRESULT
+user32.SendMessageTimeoutW.argtypes = [
+    wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+    wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t),
+]
 
 
 class TrayIcon:
@@ -189,6 +200,21 @@ class TrayIcon:
             user32.PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
         if self._thread.is_alive():
             self._thread.join(timeout=3)
+
+    def set_hotkey(self, modifiers: int, key: int) -> bool:
+        """注册全局快捷键，key 为 0 时只注销。可以在任意线程调用。
+
+        RegisterHotKey 绑定的是调用线程的窗口，必须在托盘线程里执行，
+        所以这里把请求发过去同步等结果。
+        """
+        if not self._hwnd or self._stopping:
+            return False
+        result = ctypes.c_size_t(0)
+        sent = user32.SendMessageTimeoutW(
+            self._hwnd, WM_SET_HOTKEY, modifiers, key,
+            SMTO_ABORTIFHUNG, 2000, ctypes.byref(result),
+        )
+        return bool(sent) and bool(result.value)
 
     def set_tooltip(self, text: str) -> None:
         self._pending_tip = text[:127]
@@ -258,6 +284,15 @@ class TrayIcon:
         if message == WM_RETIP:
             self._notify(NIM_MODIFY)
             return 0
+        if message == WM_HOTKEY:
+            if wparam == HOTKEY_ID:
+                self._safely(self.on_open)
+            return 0
+        if message == WM_SET_HOTKEY:
+            user32.UnregisterHotKey(hwnd, HOTKEY_ID)
+            if not lparam:
+                return 1
+            return 1 if user32.RegisterHotKey(hwnd, HOTKEY_ID, wparam | MOD_NOREPEAT, lparam) else 0
         if message == WM_QUERYENDSESSION:
             # 安装程序的重启管理器和关机流程都会先问一句，答应它
             return 1
@@ -274,6 +309,7 @@ class TrayIcon:
             self._request_quit()
             return 0
         if message == WM_DESTROY:
+            user32.UnregisterHotKey(hwnd, HOTKEY_ID)
             user32.PostQuitMessage(0)
             return 0
         return user32.DefWindowProcW(hwnd, message, wparam, lparam)

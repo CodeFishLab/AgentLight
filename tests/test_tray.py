@@ -137,3 +137,25 @@ def test_dpi_awareness_never_raises_even_if_every_api_is_missing(monkeypatch) ->
     monkeypatch.setattr(tray_module.ctypes, "windll", _Blank())
 
     tray_module.enable_dpi_awareness()
+
+
+def test_hotkey_cannot_be_registered_before_the_tray_window_exists() -> None:
+    icon, _ = build_icon()
+
+    assert icon.set_hotkey(0x0003, ord("L")) is False
+
+
+def test_only_our_hotkey_id_opens_the_config_page() -> None:
+    # 不起真窗口：Shell_NotifyIcon 内部会有被系统自己吞掉的访问异常，faulthandler 会把它刷进测试输出
+    icon, calls = build_icon()
+
+    icon._handle_message(0, tray_module.WM_HOTKEY, tray_module.HOTKEY_ID, 0)
+    icon._handle_message(0, tray_module.WM_HOTKEY, tray_module.HOTKEY_ID + 1, 0)
+
+    assert calls == ["open"]
+
+
+def test_hotkey_request_with_no_key_only_unregisters() -> None:
+    icon, _ = build_icon()
+
+    assert icon._handle_message(0, tray_module.WM_SET_HOTKEY, 0, 0) == 1

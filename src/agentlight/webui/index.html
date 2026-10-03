@@ -385,6 +385,15 @@
                 </span>
               </span>
             </label>
+            <div class="field">
+              <span>打开配置页快捷键</span>
+              <div class="hotkey-row">
+                <input type="text" id="set-hotkey" class="hotkey-input" readonly spellcheck="false" autocomplete="off"
+                       placeholder="点击后按下组合键" aria-label="打开配置页快捷键，点击后按下组合键录制" aria-describedby="hotkey-status">
+                <label class="check"><input type="checkbox" id="set-hotkey-enabled"><span>启用</span></label>
+              </div>
+              <small class="hotkey-status" id="hotkey-status" hidden></small>
+            </div>
             <label class="field"><span>夜间模式亮度 <b id="out-night">35%</b></span><input type="range" id="set-night-scale" min="5" max="100" step="5"></label>
             <div class="field checks"><label class="check"><input type="checkbox" id="set-autostart"><span>随 Windows 登录启动</span></label></div>
           </div>

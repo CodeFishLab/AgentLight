@@ -14,6 +14,7 @@ from .arbitration import StateArbitrator
 from .claude_quota import ClaudeQuotaProvider
 from .config import DEFAULT_CONFIG, ConfigManager
 from .device import HardwareWorker
+from .hotkey import normalize_combo, parse_combo
 from .integrations import IntegrationsManager
 from .logging_setup import configure_logging
 from .models import EffectiveState, StateProfile, VALID_STATES
@@ -100,6 +101,10 @@ class AgentLightService:
         # 会因此立刻评估一次，否则 23:30 才打开开关的话要干等到 07:00 才生效。
         self._in_rest_window: bool | None = None
         self._in_mute_window: bool | None = None
+        # 全局快捷键由托盘线程注册，这里只持有注册函数和最近一次的结果。
+        # 函数签名 (修饰位, 虚拟键码) -> 是否成功，(0, 0) 表示注销。
+        self._hotkey_register: Callable[[int, int], bool] | None = None
+        self._hotkey_error: str | None = None
         self._last_effective = EffectiveState("off")
         self._displayed_state = "off"
         self._runtime_sleep: tuple[bool, int, bool] | None = None
@@ -579,6 +584,18 @@ class AgentLightService:
         for key in ("device_rest_schedule", "mute_schedule"):
             if key in normalized:
                 normalized[key] = self._clean_window_schedule(normalized[key])
+        if "hotkey" in normalized:
+            normalized["hotkey"] = self._clean_hotkey(normalized["hotkey"])
+        if "hotkey" in normalized and normalized["hotkey"] != self.config.get("hotkey"):
+            # 没改就不重新注册：否则启动时就被占用的快捷键会让每次保存都失败。
+            # 先注册再落盘：组合键被别的程序占着就整次保存失败，旧快捷键继续可用，
+            # 而不是存进一个按了没反应的值
+            if self._hotkey_register is not None:
+                error = self._bind_hotkey(normalized["hotkey"])
+                if error:
+                    self._hotkey_error = self._bind_hotkey(self.config.get("hotkey", {}))
+                    raise ValueError(error)
+                self._hotkey_error = None
         updated = self.config.update(normalized)
         self._paused = bool(updated.get("paused", False))
         was_muted = self._muted
@@ -603,6 +620,37 @@ class AgentLightService:
         interval = int(updated.get("quota_refresh_interval_seconds", 300))
         self.claude_quota.configure(interval)
         self._notify()
+
+    @staticmethod
+    def _clean_hotkey(raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, dict):
+            raise ValueError("快捷键设置必须是对象")
+        return {"enabled": bool(raw.get("enabled")), "combo": normalize_combo(raw.get("combo"))}
+
+    def attach_hotkey(self, register: Callable[[int, int], bool]) -> None:
+        """接上托盘的注册函数，并按当前配置注册一次。"""
+        self._hotkey_register = register
+        self._hotkey_error = self._bind_hotkey(self.config.get("hotkey", {}))
+        if self._hotkey_error:
+            self.logger.warning("全局快捷键未生效：%s", self._hotkey_error)
+        self._notify()
+
+    def _bind_hotkey(self, settings: dict[str, Any]) -> str | None:
+        """按设置注册或注销快捷键，返回失败原因；成功或已关闭时返回 None。"""
+        register = self._hotkey_register
+        if register is None:
+            return None
+        if not settings.get("enabled"):
+            register(0, 0)
+            return None
+        try:
+            modifiers, key, name = parse_combo(settings.get("combo", ""))
+        except ValueError as exc:
+            register(0, 0)
+            return str(exc)
+        if register(modifiers, key):
+            return None
+        return f"{name} 注册失败，可能已被其他程序占用，请换一个组合"
 
     def configure_device(self, device: dict[str, Any]) -> None:
         current = self.config.get("device", {})
@@ -769,6 +817,7 @@ class AgentLightService:
             "device": self.hardware.snapshot(),
             "config": config,
             "preview": self.preview_snapshot(),
+            "hotkey": {"error": self._hotkey_error},
             "runtime_sleep_suppressed": bool(self._runtime_sleep and not self._runtime_sleep[0] and config["device"].get("auto_sleep")),
         }
         if include_integrations:
