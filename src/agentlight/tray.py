@@ -9,12 +9,14 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import threading
 from ctypes import wintypes
 from typing import Any, Callable
 
 from .paths import icon_path
 
+logger = logging.getLogger("agentlight")
 
 # PER_MONITOR_AWARE_V2：菜单按所在显示器的实际 DPI 渲染，跨屏拖动也会重算
 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
@@ -56,6 +58,7 @@ WM_HOTKEY = 0x0312
 HOTKEY_ID = 1
 MOD_NOREPEAT = 0x4000  # 按住不放只触发一次，不然会连开一串标签页
 SMTO_ABORTIFHUNG = 0x0002
+ASFW_ANY = -1
 
 WM_LBUTTONDBLCLK = 0x0203
 WM_RBUTTONUP = 0x0205
@@ -286,6 +289,10 @@ class TrayIcon:
             return 0
         if message == WM_HOTKEY:
             if wparam == HOTKEY_ID:
+                logger.info("全局快捷键触发，打开配置页")
+                # 按下热键时前台权限在本进程手里；浏览器是另一个进程，不显式转交的话
+                # 它激活不了自己的窗口，标签页只会开在后台，看起来就像「没反应」
+                user32.AllowSetForegroundWindow(ASFW_ANY)
                 self._safely(self.on_open)
             return 0
         if message == WM_SET_HOTKEY:
@@ -324,8 +331,8 @@ class TrayIcon:
     def _safely(callback: Callable[..., Any], *args: Any) -> None:
         try:
             callback(*args)
-        except Exception:  # 托盘线程里抛异常会吞掉消息循环
-            pass
+        except Exception:  # 托盘线程里抛异常会吞掉消息循环，只记日志不往外抛
+            logger.exception("托盘回调执行失败")
 
     def build_menu(self, state: dict[str, Any]) -> int:
         """构建右键菜单，返回菜单句柄。调用方负责 DestroyMenu。"""

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import logging
 import os
 import socket
 import subprocess
@@ -101,6 +102,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def open_page(url: str) -> None:
+    # webbrowser.open 找不到浏览器时只返回 False 不抛异常，不记下来就是无声失败
+    if not webbrowser.open(url):
+        logging.getLogger("agentlight").warning("打开配置页失败：系统没有返回可用的浏览器")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.remove_integrations:
@@ -151,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
 
     tray = TrayIcon(
         tooltip="Agent 状态灯",
-        on_open=lambda: webbrowser.open(url),
+        on_open=lambda: open_page(url),
         on_mute=service.set_muted,
         on_pause=service.set_paused,
         on_quit=stop.set,

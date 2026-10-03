@@ -159,3 +159,24 @@ def test_hotkey_request_with_no_key_only_unregisters() -> None:
     icon, _ = build_icon()
 
     assert icon._handle_message(0, tray_module.WM_SET_HOTKEY, 0, 0) == 1
+
+
+def test_callback_errors_are_logged_instead_of_silently_swallowed(caplog) -> None:
+    """快捷键「没反应」时，日志是唯一能看出是没收到还是打开失败的地方。"""
+    def boom() -> None:
+        raise RuntimeError("no browser")
+
+    with caplog.at_level("ERROR", logger="agentlight"):
+        tray_module.TrayIcon._safely(boom)
+
+    assert "托盘回调执行失败" in caplog.text
+
+
+def test_hotkey_trigger_is_logged(caplog) -> None:
+    icon, calls = build_icon()
+
+    with caplog.at_level("INFO", logger="agentlight"):
+        icon._handle_message(0, tray_module.WM_HOTKEY, tray_module.HOTKEY_ID, 0)
+
+    assert calls == ["open"]
+    assert "全局快捷键触发" in caplog.text
