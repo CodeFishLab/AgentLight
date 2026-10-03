@@ -579,3 +579,5 @@ def test_settings_page_carries_the_global_hotkey_controls() -> None:
     # 只在改过时才把 hotkey 发给后端，避免启动时就被占用的组合连累其他设置
     assert "hotkeyChanged ? { hotkey }" in source
     assert "snapshot.hotkey" in source
+    # 录完会 blur，焦点保护失效；只在已保存的值变化时同步，否则状态推送会冲掉草稿
+    assert "dataset.saved !== savedHotkey" in source

@@ -1099,10 +1099,16 @@
     $("set-night-scale").value = String(scale);
     $("out-night").textContent = `${scale}%`;
     $("set-autostart").checked = Boolean(store.autostart);
+    // 录完会主动 blur，上面的焦点保护就拦不住了；状态推送一来就会把没保存的
+    // 草稿冲回旧值。所以只在已保存的值真的变了（如保存成功）时才同步。
     const hotkey = config.hotkey || { enabled: false, combo: "" };
-    $("set-hotkey").value = hotkey.combo;
-    $("set-hotkey").dataset.combo = hotkey.combo;
-    $("set-hotkey-enabled").checked = Boolean(hotkey.enabled);
+    const savedHotkey = `${Boolean(hotkey.enabled)}|${hotkey.combo}`;
+    if ($("set-hotkey").dataset.saved !== savedHotkey) {
+      $("set-hotkey").dataset.saved = savedHotkey;
+      $("set-hotkey").value = hotkey.combo;
+      $("set-hotkey").dataset.combo = hotkey.combo;
+      $("set-hotkey-enabled").checked = Boolean(hotkey.enabled);
+    }
 
     const grid = $("priority-grid");
     if (grid.children.length !== STATES.length) {
